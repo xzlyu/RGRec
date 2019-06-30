@@ -37,13 +37,13 @@ parser.add_argument('--reserved_rule_num_by_frequency', type=int, default=10000,
 parser.add_argument('--neighbour_size', type=int, default=3,
                     help="the num of neighbourhood to sample of an entity")
 
-# training params
-parser.add_argument('--dim', type=int, default=16, help='dimension of user and entity embeddings')
-parser.add_argument('--l2_weight', type=float, default=1e-4, help='weight of l2 regularization')
-parser.add_argument('--lr', type=float, default=5e-4, help='learning rate')
-parser.add_argument('--batch_size', type=int, default=256, help='batch size')
-parser.add_argument('--n_epochs', type=int, default=100, help='the number of epochs')
-parser.add_argument('--dropout', type=float, default=0, help='probility to drop out')
+# rule gcn training params
+parser.add_argument('--rkgcn_dim', type=int, default=16, help='dimension of user and entity embeddings')
+parser.add_argument('--rkgcn_l2_weight', type=float, default=1e-4, help='weight of l2 regularization')
+parser.add_argument('--rkgcn_lr', type=float, default=5e-4, help='learning rate')
+parser.add_argument('--rkgcn_batch_size', type=int, default=256, help='batch size')
+parser.add_argument('--rkgcn_n_epochs', type=int, default=100, help='the number of epochs')
+parser.add_argument('--rkgcn_dropout', type=float, default=0, help='probility to drop out')
 
 # parser.add_argument('--dataset', type=str, default='music', help='which dataset to use')
 # parser.add_argument('--aggregator', type=str, default='sum', help='which aggregator to use')
@@ -52,5 +52,11 @@ parser.add_argument('--dropout', type=float, default=0, help='probility to drop 
 # parser.add_argument('--n_iter', type=int, default=1, help='number of iterations when computing entity representation')
 # parser.add_argument('--ls_weight', type=float, default=0, help='weight of LS regularization')
 # parser.add_argument('--ratio', type=float, default=1, help='size of training dataset')
+
+# pra training params
+parser.add_argument('--pra_l2_weight', type=float, default=1e-4, help='weight of l2 regularization')
+parser.add_argument('--pra_lr', type=float, default=5e-4, help='learning rate')
+parser.add_argument('--pra_batch_size', type=int, default=256, help='batch size')
+parser.add_argument('--pra_n_epochs', type=int, default=100, help='the number of epochs')
 
 args = parser.parse_args()

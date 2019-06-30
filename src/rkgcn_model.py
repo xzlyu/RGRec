@@ -14,14 +14,21 @@ class RKGCN(nn.Module):
         self.r_num = r_num
         self.rule_size = rule_size
         self.adj_e_id_by_r_id_dict = adj_e_id_by_r_id_dict
-        self.args = args
+        self._build_param(args)
         self._build_model()
 
+    def _build_param(self, args):
+        self.dim = args.rkgcn_dim
+        self.batch_size = args.rkgcn_batch_size
+        self.max_step = args.rkgcn_max_step
+        self.neighbour_size = args.rkgcn_neighbour_size
+        self.dropout = args.rkgcn_dropout
+
     def _build_model(self):
-        self.ent_embed = nn.Embedding(self.e_num, self.args.dim).to(device)
+        self.ent_embed = nn.Embedding(self.e_num, self.dim).to(device)
         self.rule_embed = nn.Embedding(1, self.rule_size).to(device)
         # self.rule_embed = torch.Tensor(np.ones([1, self.rule_size]) / self.rule_size).to(device)
-        self.aggregate_layer = nn.Linear(self.args.dim, self.args.dim).to(device)
+        self.aggregate_layer = nn.Linear(self.dim, self.dim).to(device)
         torch.nn.init.xavier_uniform(self.ent_embed.weight)
         torch.nn.init.xavier_uniform(self.rule_embed.weight)
         torch.nn.init.xavier_uniform(self.aggregate_layer.weight)
@@ -63,13 +70,13 @@ class RKGCN(nn.Module):
 
         loss = criterion(res_prob, torch.Tensor(label_array).to(device))
         loss.backward()
-        return loss.cpu().item() / self.args.batch_size
+        return loss.cpu().item() / self.batch_size
 
     def get_adj_ent_of_r_id(self, one_rule, seed):
         # seed, np array, [batch_size,1]
         # entities, list, [np array], [[batch_size,1]]
         entities = [seed]
-        for idx in range(self.args.max_step):
+        for idx in range(self.max_step):
             if idx >= len(one_rule):
                 r_id = self.r_num
             else:
@@ -78,7 +85,7 @@ class RKGCN(nn.Module):
             neighbours = self.adj_e_id_by_r_id_dict[r_id]
             # r_neighbour, np array, [self.batch_size,-1]
             # entities[idx], np_array, [batch_size, neighbour_size^idx]
-            r_neighbour = neighbours[entities[idx], :].reshape([self.args.batch_size, -1])
+            r_neighbour = neighbours[entities[idx], :].reshape([self.batch_size, -1])
             entities.append(r_neighbour)
         # entities, list, [i,[batch_size,neighbour_size^i]], i in [0,1,...,max_step]
         return entities
@@ -97,12 +104,12 @@ class RKGCN(nn.Module):
         neighbors_agg = self.mix_neighbour_vectors(neighbor_vectors)
 
         # [-1, dim]
-        output = (self_vectors + neighbors_agg).view([-1, self.args.dim])
-        output = F.dropout(output, p=self.args.dropout)
+        output = (self_vectors + neighbors_agg).view([-1, self.dim])
+        output = F.dropout(output, p=self.dropout)
         output = self.aggregate_layer(output)
 
         # [batch_size, -1, dim]
-        output = output.view([self.args.batch_size, -1, self.args.dim]).to(device)
+        output = output.view([self.batch_size, -1, self.dim]).to(device)
 
         return act(output)
 
@@ -110,18 +117,18 @@ class RKGCN(nn.Module):
 
         entity_vectors = [self.ent_embed(torch.LongTensor(i).to(device)).to(device) for i in entities]
 
-        for i in range(self.args.max_step):
-            act = torch.tanh if i == self.args.max_step - 1 else torch.relu
+        for i in range(self.max_step):
+            act = torch.tanh if i == self.max_step - 1 else torch.relu
             entity_vectors_next_iter = []
-            for hop in range(self.args.max_step - i):
-                shape = [self.args.batch_size, -1, self.args.neighbour_size, self.args.dim]
+            for hop in range(self.max_step - i):
+                shape = [self.args.batch_size, -1, self.neighbour_size, self.dim]
                 vector = self.sum_aggreator(
-                    self_vectors=entity_vectors[hop].view([self.args.batch_size, -1, self.args.dim]),
+                    self_vectors=entity_vectors[hop].view([self.batch_size, -1, self.dim]),
                     neighbor_vectors=entity_vectors[hop + 1].view(shape), act=act)
                 entity_vectors_next_iter.append(vector)
             entity_vectors = entity_vectors_next_iter
 
-        res = entity_vectors[0].view([self.args.batch_size, -1, self.args.dim])
+        res = entity_vectors[0].view([self.batch_size, -1, self.dim])
         return res
 
     def auc_f1_prec_recal_scores_eval(self, user_item_array, rule_list, label_array):

@@ -7,7 +7,7 @@ from sklearn.metrics import roc_curve
 
 from src.Args import args
 from src.Graph import Graph
-from src.model import RKGCN
+from src.rkgcn_model import RKGCN
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -33,21 +33,26 @@ def load_data():
     # return train_data[:, 0:2], eval_data[:, 0:2], test_data[:, 0:2], train_data[:, 2], eval_data[:, 2], test_data[:, 2]
 
 
-def train(g, model, rule_id_list):
+def train_rule_gcn(model, rule_id_list):
+    lr = args.rkgcn_lr
+    l2_weight = args.rkgcn_l2_weight
+    n_epochs = args.rkgcn_n_epochs
+    batch_size = args.rkgcn_batch_size
+
     train_data_label, eval_data_label, test_data_label = load_data()
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.l2_weight)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=l2_weight)
 
-    for epoch_i in range(args.n_epochs):
+    for epoch_i in range(n_epochs):
 
         np.random.shuffle(train_data_label)
         start = 0
         # skip the last incomplete minibatch if its size < batch size
-        while start + args.batch_size <= train_data_label.shape[0]:
+        while start + batch_size <= train_data_label.shape[0]:
             optimizer.zero_grad()
             loss = model.update(train_data_label[start:start + args.batch_size, 0:2], rule_id_list,
                                 train_data_label[start:start + args.batch_size, 2])
-            start += args.batch_size
+            start += batch_size
             # print("Epoch: {}/{}, Start: {}/{}, Loss: {}"
             #       .format(epoch_i, args.n_epochs, start, train_data.shape[0], loss))
             optimizer.step()
@@ -115,4 +120,4 @@ if __name__ == "__main__":
     rule_id_list = [rule for _, _, rule, _ in rule_list]
 
     rkgcn = RKGCN(args, len(g.e_id2name), len(g.r_id2name), len(rule_id_list), g.adj_e_id_by_r_id).to(device)
-    train(g, rkgcn, rule_id_list)
+    train_rule_gcn(rkgcn, rule_id_list)
