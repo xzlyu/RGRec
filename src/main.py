@@ -84,10 +84,10 @@ def train_rkgcn(rkgcn_model, rule_id_list):
             % (epoch_i, train_auc, train_f1, train_prec, train_reca, eval_auc, eval_f1, eval_prec, eval_reca, test_auc,
                test_f1, test_prec, test_reca))
 
-        if len(eval_auc_list) == 0 or eval_auc_list[-1] > eval_auc_list[-2]:
+        if len(eval_auc_list) == 1 or eval_auc_list[-1] > eval_auc_list[-2]:
             rkgcn_model.save_model()
 
-        if len(eval_auc_list) != 0 and eval_auc_list[-1] <= eval_auc_list[-2]:
+        if len(eval_auc_list) != 1 and eval_auc_list[-1] <= eval_auc_list[-2]:
             break
 
 
