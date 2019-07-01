@@ -9,8 +9,8 @@ from src.Args import args
 
 
 class Graph:
-    def __init__(self, args):
-        self.args = args
+    def __init__(self, g_args):
+        self._build_param(g_args)
 
         """
         {
@@ -70,16 +70,32 @@ class Graph:
         """
         self.r_id2ht_id = dict()
 
+        self.adj_e_id_by_r_id = dict()
+
+    def _build_param(self, args):
+
         self.none_node_name = "None Node"
         self.none_node_id = -1
 
-        self.adj_e_id_by_r_id = dict()
+        self.neighbour_size = args.rkgcn_neighbour_size
+        self.entity_file = args.entity_file
+        self.relation_file = args.relation_file
+        self.kg_file = args.kg_file
+        self.rule_file = args.rule_file
+        self.train_file = args.train_file
+
+        self.filter_inv_pattern = args.filter_inv_pattern
+        self.rule_seg = args.rule_seg
+        self.reserved_rule_num_by_frequency = args.reserved_rule_num_by_frequency
+
+        self.max_step = args.rkgcn_max_step
+        self.chi_thresh = args.chi_thresh
 
     def load_e_r_mapping(self):
 
         if len(self.e_id2name) == 0:
             print("load e  mapping")
-            for line in open(self.args.entity_file, 'r', encoding="UTF-8").readlines()[1:]:
+            for line in open(self.entity_file, 'r', encoding="UTF-8").readlines()[1:]:
                 e_name, e_id = line.split()
                 e_id = int(e_id)
                 self.e_name2id[e_name] = e_id
@@ -90,7 +106,7 @@ class Graph:
 
         if len(self.r_name2id) == 0:
             print("load r mapping")
-            for line in open(self.args.relation_file, 'r', encoding="UTF-8").readlines()[1:]:
+            for line in open(self.relation_file, 'r', encoding="UTF-8").readlines()[1:]:
                 r_name, r_id = line.split()
                 r_id = int(r_id)
                 self.r_name2id[r_name] = r_id
@@ -101,11 +117,11 @@ class Graph:
             return
 
         print("construct kg")
-        if os.path.exists(self.args.kg_file + '.npy'):
-            kg_np = np.load(self.args.kg_file + '.npy')
+        if os.path.exists(self.kg_file + '.npy'):
+            kg_np = np.load(self.kg_file + '.npy')
         else:
-            kg_np = np.loadtxt(self.args.kg_file + '.txt', dtype=np.int64)
-            np.save(self.args.kg_file + '.npy', kg_np)
+            kg_np = np.loadtxt(self.kg_file + '.txt', dtype=np.int64)
+            np.save(self.kg_file + '.npy', kg_np)
 
         kg_np = kg_np.astype(np.int32)
         for h_id, r_id, t_id in kg_np:
@@ -118,7 +134,7 @@ class Graph:
             if r_id not in self.r_id2ht_id:
                 self.r_id2ht_id[r_id] = []
             self.r_id2ht_id[r_id].append([h_id, t_id])
-            self.kg[self.none_node_id] = dict()
+        self.kg[self.none_node_id] = dict()
 
     def construct_adj_e_id(self):
         print("Construct_ajd_e_id")
@@ -130,19 +146,19 @@ class Graph:
         e_num = len(self.e_id2name)
 
         for r_id in self.r_id2name:
-            self.adj_e_id_by_r_id[r_id] = np.zeros(shape=[e_num, self.args.neighbour_size], dtype=np.int32)
+            self.adj_e_id_by_r_id[r_id] = np.zeros(shape=[e_num, self.neighbour_size], dtype=np.int32)
             for e_id in self.e_id2name:
                 r_neighbour_list = self.get_neighbours(e_id, r_id)
-                if len(r_neighbour_list) >= args.neighbour_size:
-                    sampled_neighbours = np.random.choice(r_neighbour_list, size=args.neighbour_size,
+                if len(r_neighbour_list) >= self.neighbour_size:
+                    sampled_neighbours = np.random.choice(r_neighbour_list, size=self.neighbour_size,
                                                           replace=False)
                 else:
-                    sampled_neighbours = np.random.choice(r_neighbour_list, size=args.neighbour_size,
+                    sampled_neighbours = np.random.choice(r_neighbour_list, size=self.neighbour_size,
                                                           replace=True)
                 self.adj_e_id_by_r_id[r_id][e_id] = np.array(sampled_neighbours).astype(dtype=np.int32)
 
         r_num = len(self.r_id2name)
-        self.adj_e_id_by_r_id[r_num] = np.ones(shape=[e_num, self.args.neighbour_size],
+        self.adj_e_id_by_r_id[r_num] = np.ones(shape=[e_num, self.neighbour_size],
                                                dtype=np.int32) * self.none_node_id
 
     def get_neighbours(self, h_id, r_id):
@@ -293,10 +309,10 @@ class Graph:
                 r_path = self.extract_r_id_path(p)
                 if len(r_path) == 1 and r_path[0] == r_id:
                     continue
-                if self.args.filter_inv_pattern and self.has_inverse_r_in_r_path(r_path):
+                if self.filter_inv_pattern and self.has_inverse_r_in_r_path(r_path):
                     continue
 
-                r_path_key = self.args.rule_seg.join(map(str, r_path))
+                r_path_key = self.rule_seg.join(map(str, r_path))
 
                 searched_e_r_path.append(p)
                 if r_path_key not in searched_r_path:
@@ -312,7 +328,7 @@ class Graph:
                 sorted(
                     search_r_path_num.items(),
                     key=lambda d: d[1],
-                    reverse=True))[:self.args.reserved_rule_num_by_frequency]:
+                    reverse=True))[:self.reserved_rule_num_by_frequency]:
             res_r_id_path_list.append(searched_r_path[key])
         return res_r_id_path_list, searched_e_r_path
 
@@ -549,32 +565,113 @@ class Graph:
     def get_rules(self, r_id):
 
         rules_final = []
-        if os.path.exists(self.args.rule_file):
-            for line in open(self.args.rule_file, 'r', encoding="UTF-8").readlines():
+        if os.path.exists(self.rule_file):
+            for line in open(self.rule_file, 'r', encoding="UTF-8").readlines():
                 order, p_value, r_id_path, r_name_path = line.split("\t")
                 rules_final.append(
                     [order, p_value, list(map(lambda x: int(x), r_id_path.split(" "))), r_name_path.split(" ")])
             return rules_final
 
-        train_data = np.load(self.args.train_file)
+        train_data = np.load(self.train_file)
         train_data = list(train_data[np.where(train_data[:, 2] == 1)])
 
         self.load_e_r_mapping()
         self.construct_kg()
-        res_r_id_path_list, searched_e_r_path = g.search_path(r_id, self.args.max_step, train_data)
+        res_r_id_path_list, searched_e_r_path = g.search_path(r_id, self.max_step, train_data)
 
         cnt = 0
         for r_id_path in res_r_id_path_list:
             p_value = g.chi_square(r_id, r_id_path)
-            if p_value < self.args.chi_thresh:
+            if p_value < self.chi_thresh:
                 rules_final.append([cnt, p_value, r_id_path, g.display_r_path(r_id_path)])
                 cnt += 1
 
-        with open(self.args.rule_file, 'w', encoding="UTF-8") as f:
+        with open(self.rule_file, 'w', encoding="UTF-8") as f:
             for order, p_value, r_id_path, r_name_path in rules_final:
                 f.write("{}\t{}\t{}\t{}\n".format(order, p_value, " ".join(map(lambda x: str(x), r_id_path)),
                                                   " ".join(r_name_path)))
         return rules_final
+
+    def get_o_list(self, s_id, r_id):
+        if s_id not in self.kg:
+            return []
+        if r_id not in self.kg[s_id]:
+            return []
+        return self.kg[s_id][r_id]
+
+    '''
+    Check if a h t can pass the rule
+    Parameters:
+    -----------
+    so: list, [subject,object]
+    rule: list, [r_idx,r_idx,...]
+
+    Returns:
+    -----------
+    out: boolean
+    If ht passed rule, return Ture, False otherwises.
+    '''
+
+    def is_passed(self, so, rule):
+        left_node = [so[0]]
+        right_node = [so[-1]]
+        left_step = 0
+        right_step = 0
+        while len(rule) - (left_step + right_step) > 0:
+            temp_left = []
+            temp_right = []
+            if len(left_node) < len(right_node):
+                left_step += 1
+                r_idx = rule[left_step - 1]
+                if r_idx not in self.r_id2name:
+                    return False
+                for e_idx in left_node:
+                    for tail in self.get_o_list(e_idx, r_idx):
+                        temp_left.append(tail)
+                left_node = temp_left
+            else:
+                right_step += 1
+                r_idx = rule[-right_step]
+                if r_idx not in self.r_id2name:
+                    return False
+                inv_r_idx = self.convert_r(r_idx)
+                for e_idx in right_node:
+                    for tail in self.get_o_list(e_idx, inv_r_idx):
+                        temp_right.append(tail)
+                right_node = temp_right
+        left_set = set()
+        for e_idx in left_node:
+            left_set.add(e_idx)
+        for e_idx in right_node:
+            if e_idx in left_set:
+                return True
+        return False
+
+    """
+    Get features for one pair of h and t
+    Parameters:
+    -----------
+    rule_list: list, [[p1,p2,..,pn],,...]
+    so: list, [[h,t],[h,t],[h,t],..]
+    a list of s and o
+
+    Returns:
+    -----------
+    out: list
+    A list of features, every entry represents if a rule is passed.
+    """
+
+    def get_features(self, rule_list, so_list):
+        train_x = []
+        for ht_i, ht in enumerate(so_list):
+            print("Feature: {}/{}, #Rules: {}, H: {}, T: {}".format(
+                ht_i + 1, len(so_list), len(rule_list), self.e_id2name[ht[0]],
+                self.e_id2name[ht[1]]))
+            feature = []
+            for rule in rule_list:
+                feature.append(int(self.is_passed(ht, rule)))
+            train_x.append(feature)
+        return train_x
 
 
 if __name__ == "__main__":

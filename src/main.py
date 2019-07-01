@@ -33,7 +33,7 @@ def load_data():
     # return train_data[:, 0:2], eval_data[:, 0:2], test_data[:, 0:2], train_data[:, 2], eval_data[:, 2], test_data[:, 2]
 
 
-def train_rule_gcn(model, rule_id_list):
+def train_rkgcn(rkgcn_model, rule_id_list):
     lr = args.rkgcn_lr
     l2_weight = args.rkgcn_l2_weight
     n_epochs = args.rkgcn_n_epochs
@@ -41,7 +41,9 @@ def train_rule_gcn(model, rule_id_list):
 
     train_data_label, eval_data_label, test_data_label = load_data()
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=l2_weight)
+    optimizer = torch.optim.Adam(rkgcn_model.parameters(), lr=lr, weight_decay=l2_weight)
+
+    eval_auc_list = []
 
     for epoch_i in range(n_epochs):
 
@@ -50,31 +52,43 @@ def train_rule_gcn(model, rule_id_list):
         # skip the last incomplete minibatch if its size < batch size
         while start + batch_size <= train_data_label.shape[0]:
             optimizer.zero_grad()
-            loss = model.update(train_data_label[start:start + args.batch_size, 0:2], rule_id_list,
-                                train_data_label[start:start + args.batch_size, 2])
+            loss = rkgcn_model.update(train_data_label[start:start + args.rkgcn_batch_size, 0:2], rule_id_list,
+                                train_data_label[start:start + args.rkgcn_batch_size, 2])
             start += batch_size
             # print("Epoch: {}/{}, Start: {}/{}, Loss: {}"
             #       .format(epoch_i, args.n_epochs, start, train_data.shape[0], loss))
             optimizer.step()
-        train_auc, train_f1, train_prec, train_reca = ctr_eval(epoch_i, model,
+
+        if (epoch_i + 1) / 5 != 0:
+            continue
+
+        train_auc, train_f1, train_prec, train_reca = ctr_eval(epoch_i, rkgcn_model,
                                                                train_data_label[:, 0:2],
                                                                train_data_label[:, 2],
                                                                rule_id_list,
-                                                               args.batch_size)
-        eval_auc, eval_f1, eval_prec, eval_reca = ctr_eval(epoch_i, model,
+                                                               args.rkgcn_batch_size)
+        eval_auc, eval_f1, eval_prec, eval_reca = ctr_eval(epoch_i, rkgcn_model,
                                                            eval_data_label[:, 0:2],
                                                            eval_data_label[:, 2],
                                                            rule_id_list,
-                                                           args.batch_size)
-        test_auc, test_f1, test_prec, test_reca = ctr_eval(epoch_i, model,
+                                                           args.rkgcn_batch_size)
+        test_auc, test_f1, test_prec, test_reca = ctr_eval(epoch_i, rkgcn_model,
                                                            test_data_label[:, 0:2],
                                                            test_data_label[:, 2],
                                                            rule_id_list,
-                                                           args.batch_size)
+                                                           args.rkgcn_batch_size)
+        eval_auc_list.append(eval_auc)
+
         print(
             'epoch %d    train auc: %.4f  f1: %.4f prec: %.4f reca: %.4f  eval auc: %.4f  f1: %.4f prec: %.4f reca: %.4f    test auc: %.4f  f1: %.4f prec: %.4f reca: %.4f'
             % (epoch_i, train_auc, train_f1, train_prec, train_reca, eval_auc, eval_f1, eval_prec, eval_reca, test_auc,
                test_f1, test_prec, test_reca))
+
+        if len(eval_auc_list) == 0 or eval_auc_list[-1] > eval_auc_list[-2]:
+            rkgcn_model.save_model()
+
+        if len(eval_auc_list) != 0 and eval_auc_list[-1] <= eval_auc_list[-2]:
+            break
 
 
 def ctr_eval(epoch_i, model, data, label, rule_id_list, batch_size):
@@ -120,4 +134,4 @@ if __name__ == "__main__":
     rule_id_list = [rule for _, _, rule, _ in rule_list]
 
     rkgcn = RKGCN(args, len(g.e_id2name), len(g.r_id2name), len(rule_id_list), g.adj_e_id_by_r_id).to(device)
-    train_rule_gcn(rkgcn, rule_id_list)
+    train_rkgcn(rkgcn, rule_id_list)

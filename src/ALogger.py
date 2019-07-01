@@ -13,7 +13,7 @@ class ALogger:
             if is_console_handler:
                 self.setConsoleHandler()
             else:
-                self.setFileHandler()
+                self.setFileHandler("")
 
     def getLogger(self):
         return self.logger

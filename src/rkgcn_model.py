@@ -4,12 +4,17 @@ import numpy as np
 import torch.nn.functional as F
 from sklearn.metrics import f1_score, roc_auc_score, precision_score, recall_score, roc_curve
 
+from src.ALogger import ALogger
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 class RKGCN(nn.Module):
     def __init__(self, args, e_num, r_num, rule_size, adj_e_id_by_r_id_dict):
         super(RKGCN, self).__init__()
+
+        self.logger = ALogger("PRA", True).getLogger()
+
         self.e_num = e_num
         self.r_num = r_num
         self.rule_size = rule_size
@@ -24,14 +29,39 @@ class RKGCN(nn.Module):
         self.neighbour_size = args.rkgcn_neighbour_size
         self.dropout = args.rkgcn_dropout
 
+        self.rule_weight_file_path = args.rule_weight_file_path
+        self.pre_train_rule_weight = args.pre_train_rule_weight
+        self.freeze_rule_weight = args.freeze_rule_weight
+
+        self.rkgcn_model_file_path = args.rkgcn_model_file_path
+
     def _build_model(self):
-        self.ent_embed = nn.Embedding(self.e_num, self.dim).to(device)
-        self.rule_embed = nn.Embedding(1, self.rule_size).to(device)
-        # self.rule_embed = torch.Tensor(np.ones([1, self.rule_size]) / self.rule_size).to(device)
-        self.aggregate_layer = nn.Linear(self.dim, self.dim).to(device)
+        self.ent_embed = nn.Embedding(self.e_num, self.dim, max_norm=1.0).to(device)
         torch.nn.init.xavier_uniform(self.ent_embed.weight)
-        torch.nn.init.xavier_uniform(self.rule_embed.weight)
+
+        if self.pre_train_rule_weight:
+            loaded_rule_weight = np.load(self.rule_weight_file_path)
+            self.rule_embed = nn.Embedding.from_pretrained(torch.FloatTensor(loaded_rule_weight),
+                                                           freeze=self.freeze_rule_weight,
+                                                           max_norm=1.0)
+        else:
+            self.rule_embed = nn.Embedding(1, self.rule_size, max_norm=1.0).to(device)
+            torch.nn.init.xavier_uniform(self.rule_embed.weight)
+            # self.rule_embed = torch.Tensor(np.ones([1, self.rule_size]) / self.rule_size).to(device)
+
+        self.aggregate_layer = nn.Linear(self.dim, self.dim).to(device)
         torch.nn.init.xavier_uniform(self.aggregate_layer.weight)
+
+    def save_model(self):
+        self.logger.info("Save rkgcn model to {}.".format(self.rkgcn_model_file_path))
+        torch.save(self.state_dict(), self.rkgcn_model_file_path)
+
+    def load_model(self):
+        self.logger.info("Load rkgcn model from {}.".format(self.rkgcn_model_file_path))
+        self.load_state_dict(torch.load(self.rkgcn_model_file_path))
+
+    def load_rule_weight(self, rule_weight_file_path):
+        return np.load(rule_weight_file_path)
 
     def user_rep(self, user_array, rule_list):
         adj_e_list = []
@@ -42,7 +72,7 @@ class RKGCN(nn.Module):
             adj_e_list.append(adj_e)
 
         res_list = []
-        for step_i in range(self.args.max_step + 1):
+        for step_i in range(self.max_step + 1):
             one_step_node = []
             for rule_idx in range(len(rule_list)):
                 one_step_node.append(adj_e_list[rule_idx][step_i])
@@ -121,7 +151,7 @@ class RKGCN(nn.Module):
             act = torch.tanh if i == self.max_step - 1 else torch.relu
             entity_vectors_next_iter = []
             for hop in range(self.max_step - i):
-                shape = [self.args.batch_size, -1, self.neighbour_size, self.dim]
+                shape = [self.batch_size, -1, self.neighbour_size, self.dim]
                 vector = self.sum_aggreator(
                     self_vectors=entity_vectors[hop].view([self.batch_size, -1, self.dim]),
                     neighbor_vectors=entity_vectors[hop + 1].view(shape), act=act)

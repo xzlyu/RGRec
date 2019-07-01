@@ -34,7 +34,7 @@ parser.add_argument('--filter_inv_pattern', type=bool, default=False,
 parser.add_argument('--reserved_rule_num_by_frequency', type=int, default=10000,
                     help="the number of reserved rules by descending frequency")
 
-parser.add_argument('--neighbour_size', type=int, default=3,
+parser.add_argument('--rkgcn_neighbour_size', type=int, default=3,
                     help="the num of neighbourhood to sample of an entity")
 
 # rule gcn training params
@@ -44,6 +44,10 @@ parser.add_argument('--rkgcn_lr', type=float, default=5e-4, help='learning rate'
 parser.add_argument('--rkgcn_batch_size', type=int, default=256, help='batch size')
 parser.add_argument('--rkgcn_n_epochs', type=int, default=100, help='the number of epochs')
 parser.add_argument('--rkgcn_dropout', type=float, default=0, help='probility to drop out')
+parser.add_argument('--rkgcn_max_step', type=int, default=3, help='max length of rule')
+
+parser.add_argument('--rkgcn_model_file_path', type=str, default='../data/' + DATASET + '/model/rkgcn_model.tar',
+                    help="file to store rkgcn model")
 
 # parser.add_argument('--dataset', type=str, default='music', help='which dataset to use')
 # parser.add_argument('--aggregator', type=str, default='sum', help='which aggregator to use')
@@ -58,5 +62,20 @@ parser.add_argument('--pra_l2_weight', type=float, default=1e-4, help='weight of
 parser.add_argument('--pra_lr', type=float, default=5e-4, help='learning rate')
 parser.add_argument('--pra_batch_size', type=int, default=256, help='batch size')
 parser.add_argument('--pra_n_epochs', type=int, default=100, help='the number of epochs')
+
+parser.add_argument('--pra_model_file_path', type=str, default="../data/" + DATASET + "/model/pra_model.tar",
+                    help="file to store the parameters of pra model")
+
+parser.add_argument('--pre_train_rule_weight', type=bool, default=True, help="Using pre trained rule weight or not")
+parser.add_argument('--freeze_rule_weight', type=bool, default=False, help="If freeze rule weight during training")
+parser.add_argument('--rule_weight_file_path', type=str, default="../data/" + DATASET + '/model/rule_weight.npy',
+                    help="file to store rule weight")
+
+parser.add_argument('--train_feature_file', type=str, default="../data/" + DATASET + "/model/train_feature_label.npy",
+                    help="file to store train feature data")
+parser.add_argument('--eval_feature_file', type=str, default="../data/" + DATASET + "/model/eval_feature_label.npy",
+                    help="file to store eval feature data.")
+parser.add_argument('--test_feature_file', type=str, default="../data/" + DATASET + "/model/test_feature_label.npy",
+                    help="file to store test feature data.")
 
 args = parser.parse_args()
