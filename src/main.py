@@ -53,7 +53,7 @@ def train_rkgcn(rkgcn_model, rule_id_list):
         while start + batch_size <= train_data_label.shape[0]:
             optimizer.zero_grad()
             loss = rkgcn_model.update(train_data_label[start:start + args.rkgcn_batch_size, 0:2], rule_id_list,
-                                train_data_label[start:start + args.rkgcn_batch_size, 2])
+                                      train_data_label[start:start + args.rkgcn_batch_size, 2])
             start += batch_size
             # print("Epoch: {}/{}, Start: {}/{}, Loss: {}"
             #       .format(epoch_i, args.n_epochs, start, train_data.shape[0], loss))

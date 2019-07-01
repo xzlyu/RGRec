@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import numpy as np
@@ -23,6 +24,8 @@ class RKGCN(nn.Module):
         self._build_model()
 
     def _build_param(self, args):
+        torch.cuda.set_device(1)
+        self.logger.info("Device: {}".format(torch.cuda.current_device()))
         self.dim = args.rkgcn_dim
         self.batch_size = args.rkgcn_batch_size
         self.max_step = args.rkgcn_max_step
@@ -40,11 +43,15 @@ class RKGCN(nn.Module):
         torch.nn.init.xavier_uniform(self.ent_embed.weight)
 
         if self.pre_train_rule_weight:
+            self.logger.info("Use pretrained rule weight.")
             loaded_rule_weight = np.load(self.rule_weight_file_path)
             self.rule_embed = nn.Embedding.from_pretrained(torch.FloatTensor(loaded_rule_weight),
-                                                           freeze=self.freeze_rule_weight,
-                                                           max_norm=1.0)
+                                                           freeze=self.freeze_rule_weight)
+            # self.rule_embed = nn.Embedding.from_pretrained(torch.FloatTensor(loaded_rule_weight),
+            #                                                freeze=self.freeze_rule_weight,
+            #                                                max_norm=1.0)
         else:
+            self.logger.info("Use raw pretrained rule weight.")
             self.rule_embed = nn.Embedding(1, self.rule_size, max_norm=1.0).to(device)
             torch.nn.init.xavier_uniform(self.rule_embed.weight)
             # self.rule_embed = torch.Tensor(np.ones([1, self.rule_size]) / self.rule_size).to(device)
