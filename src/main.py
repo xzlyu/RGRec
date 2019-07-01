@@ -59,7 +59,7 @@ def train_rkgcn(rkgcn_model, rule_id_list):
             #       .format(epoch_i, args.n_epochs, start, train_data.shape[0], loss))
             optimizer.step()
 
-        if (epoch_i + 1) / 5 != 0:
+        if (epoch_i + 1) % 5 != 0:
             continue
 
         train_auc, train_f1, train_prec, train_reca = ctr_eval(epoch_i, rkgcn_model,
