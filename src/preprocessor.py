@@ -1,10 +1,15 @@
 import numpy as np
 import os
+import csv
 
 from src.Args import DATASET, args
 
+THRESHOLD = dict({'movie': 4, 'book': 0, 'music': 0})
+RATING_FILE_NAME = dict({'movie': 'ratings.csv', 'book': 'BX-Book-Ratings.csv', 'music': 'user_artists.dat'})
+SEP = dict({'movie': ',', 'book': ';', 'music': '\t'})
 
-def generate_relation_id_to_relation_name(DATASET):
+
+def generate_relation_id_to_relation_name():
     relation_id = 0
     relation_name2id = dict()
     kg_file_path = "../data/" + DATASET + "/kg.txt"
@@ -35,8 +40,16 @@ def generate_relation_id_to_relation_name(DATASET):
     assert total_relation_num == relation_id, "Total: {}\tRelation id: {}".format(total_relation_num, relation_id)
 
 
+def generate_ratings():
+    rating_file = RATING_FILE_NAME[DATASET]
+    for line in open(rating_file, 'r', encoding="UTF-8").readlins():
+        user_id, item_id, _, _ = line.split(",")
+        user_id = int(user_id)
+        item_id = int(item_id)
+
+
 # add user to kg
-def construct_inv_kg(DATASET):
+def construct_inv_kg():
     relation_name2id = dict()
     relation_id2name = dict()
     entity_id_set = set()
@@ -113,6 +126,6 @@ def split_train_eval_test(rating_file, train_file, eval_file, test_file):
 
 
 if __name__ == "__main__":
-    # generate_relation_id_to_relation_name(DATASET)
-    # construct_inv_kg(DATASET)
-    split_train_eval_test(args.converted_rating_file, args.train_file, args.eval_file, args.test_file)
+    generate_relation_id_to_relation_name()
+    # construct_inv_kg()
+    # split_train_eval_test(args.converted_rating_file, args.train_file, args.eval_file, args.test_file)

@@ -1,6 +1,6 @@
 import argparse
 
-DATASET = "music"
+DATASET = "movie"
 
 parser = argparse.ArgumentParser()
 
@@ -46,7 +46,7 @@ parser.add_argument('--rkgcn_n_epochs', type=int, default=100, help='the number 
 parser.add_argument('--rkgcn_dropout', type=float, default=0, help='probility to drop out')
 parser.add_argument('--rkgcn_max_step', type=int, default=3, help='max length of rule')
 
-parser.add_argument('--rkgcn_model_file_path', type=str, default='../data/' + DATASET + '/model/rkgcn_model.tar',
+parser.add_argument('--rkgcn_model_root_path', type=str, default='../data/' + DATASET + '/model/',
                     help="file to store rkgcn model")
 
 # parser.add_argument('--dataset', type=str, default='music', help='which dataset to use')
@@ -79,3 +79,15 @@ parser.add_argument('--test_feature_file', type=str, default="../data/" + DATASE
                     help="file to store test feature data.")
 
 args = parser.parse_args()
+
+
+def args2str(my_args):
+    res_str = ""
+    for key, value in vars(my_args).items():
+        res_str += "{}\t{}\n".format(key, value)
+    return res_str
+
+
+if __name__ == "__main__":
+    print(list(vars(args)))
+    print(args2str(args))

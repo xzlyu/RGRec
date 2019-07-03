@@ -1,6 +1,6 @@
-import argparse
-
+import time
 import torch
+import os
 import numpy as np
 from matplotlib import pyplot as plt
 from sklearn.metrics import roc_curve
@@ -33,7 +33,7 @@ def load_data():
     # return train_data[:, 0:2], eval_data[:, 0:2], test_data[:, 0:2], train_data[:, 2], eval_data[:, 2], test_data[:, 2]
 
 
-def train_rkgcn(rkgcn_model, rule_id_list):
+def train_rkgcn(rkgcn_model, rule_id_list, model_file, eval_file_path):
     lr = args.rkgcn_lr
     l2_weight = args.rkgcn_l2_weight
     n_epochs = args.rkgcn_n_epochs
@@ -44,6 +44,7 @@ def train_rkgcn(rkgcn_model, rule_id_list):
     optimizer = torch.optim.Adam(rkgcn_model.parameters(), lr=lr, weight_decay=l2_weight)
 
     eval_auc_list = []
+    writer = open(eval_file_path, 'w', encoding="UTF-8")
 
     for epoch_i in range(n_epochs):
 
@@ -79,13 +80,15 @@ def train_rkgcn(rkgcn_model, rule_id_list):
                                                            args.rkgcn_batch_size)
         eval_auc_list.append(eval_auc)
 
-        print(
-            'epoch %d    train auc: %.4f  f1: %.4f prec: %.4f reca: %.4f  eval auc: %.4f  f1: %.4f prec: %.4f reca: %.4f    test auc: %.4f  f1: %.4f prec: %.4f reca: %.4f'
-            % (epoch_i, train_auc, train_f1, train_prec, train_reca, eval_auc, eval_f1, eval_prec, eval_reca, test_auc,
-               test_f1, test_prec, test_reca))
+        print('epoch %d\ntrain auc: %.4f  f1: %.4f prec: %.4f reca: %.4f\n'
+              'eval auc: %.4f  f1: %.4f prec: %.4f reca: %.4f\n'
+              'test auc: %.4f  f1: %.4f prec: %.4f reca: %.4f'
+              % (epoch_i, train_auc, train_f1, train_prec, train_reca,
+                 eval_auc, eval_f1, eval_prec, eval_reca,
+                 test_auc, test_f1, test_prec, test_reca))
 
         if len(eval_auc_list) == 1 or eval_auc_list[-1] > eval_auc_list[-2]:
-            rkgcn_model.save_model()
+            rkgcn_model.save_model(model_file)
 
         if len(eval_auc_list) != 1 and eval_auc_list[-1] <= eval_auc_list[-2]:
             break
@@ -134,4 +137,13 @@ if __name__ == "__main__":
     rule_id_list = [rule for _, _, rule, _ in rule_list]
 
     rkgcn = RKGCN(args, len(g.e_id2name), len(g.r_id2name), len(rule_id_list), g.adj_e_id_by_r_id).to(device)
-    train_rkgcn(rkgcn, rule_id_list)
+    time_stamp = time.time()
+
+    model_folder = "{}{}/".format(args.rkgcn_model_root_path, time_stamp)
+    if not os.path.exists(model_folder):
+        os.makedirs(model_folder)
+
+    eval_res_file_path = "{}{}".format(model_folder, "eval.txt")
+    model_file_path = "{}{}".format(model_folder, "rkgcn_model.tar")
+
+    train_rkgcn(rkgcn, rule_id_list, model_file_path, eval_res_file_path)

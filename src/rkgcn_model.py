@@ -36,8 +36,6 @@ class RKGCN(nn.Module):
         self.pre_train_rule_weight = args.pre_train_rule_weight
         self.freeze_rule_weight = args.freeze_rule_weight
 
-        self.rkgcn_model_file_path = args.rkgcn_model_file_path
-
     def _build_model(self):
         self.ent_embed = nn.Embedding(self.e_num, self.dim, max_norm=1.0).to(device)
         torch.nn.init.xavier_uniform(self.ent_embed.weight)
@@ -59,12 +57,12 @@ class RKGCN(nn.Module):
         self.aggregate_layer = nn.Linear(self.dim, self.dim).to(device)
         torch.nn.init.xavier_uniform(self.aggregate_layer.weight)
 
-    def save_model(self):
-        self.logger.info("Save rkgcn model to {}.".format(self.rkgcn_model_file_path))
+    def save_model(self, model_file_path):
+        self.logger.info("Save rkgcn model to {}.".format(model_file_path))
         torch.save(self.state_dict(), self.rkgcn_model_file_path)
 
-    def load_model(self):
-        self.logger.info("Load rkgcn model from {}.".format(self.rkgcn_model_file_path))
+    def load_model(self, model_file_path):
+        self.logger.info("Load rkgcn model from {}.".format(model_file_path))
         self.load_state_dict(torch.load(self.rkgcn_model_file_path))
 
     def load_rule_weight(self, rule_weight_file_path):
