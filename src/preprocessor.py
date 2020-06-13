@@ -2,7 +2,7 @@ import numpy as np
 import os
 import csv
 
-from src.Args import DATASET, args
+from Args import DATASET, args
 
 THRESHOLD = dict({'movie': 4, 'book': 0, 'music': 0})
 RATING_FILE_NAME = dict({'movie': 'ratings.csv', 'book': 'BX-Book-Ratings.csv', 'music': 'user_artists.dat'})
@@ -42,7 +42,7 @@ def generate_relation_id_to_relation_name():
 
 def generate_ratings():
     rating_file = RATING_FILE_NAME[DATASET]
-    for line in open(rating_file, 'r', encoding="UTF-8").readlins():
+    for line in open(rating_file, 'r', encoding="UTF-8").readlines():
         user_id, item_id, _, _ = line.split(",")
         user_id = int(user_id)
         item_id = int(item_id)

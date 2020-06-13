@@ -4,8 +4,8 @@ import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
 from sklearn.metrics import f1_score, roc_auc_score, precision_score, recall_score, roc_curve
-
-from src.ALogger import ALogger
+import math
+from ALogger import ALogger
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -15,6 +15,7 @@ class RKGCN(nn.Module):
         super(RKGCN, self).__init__()
 
         self.logger = ALogger("PRA", True).getLogger()
+        self.device_num = 0
 
         self.e_num = e_num
         self.r_num = r_num
@@ -24,7 +25,7 @@ class RKGCN(nn.Module):
         self._build_model()
 
     def _build_param(self, args):
-        torch.cuda.set_device(1)
+        torch.cuda.set_device(self.device_num)
         self.logger.info("Device: {}".format(torch.cuda.current_device()))
         self.dim = args.rkgcn_dim
         self.batch_size = args.rkgcn_batch_size
@@ -35,6 +36,10 @@ class RKGCN(nn.Module):
         self.rule_weight_file_path = args.rule_weight_file_path
         self.pre_train_rule_weight = args.pre_train_rule_weight
         self.freeze_rule_weight = args.freeze_rule_weight
+
+        self.rkgcn_model_file_path = args.rkgcn_model_root_path
+
+        self.aggregate_name = args.aggregator_name
 
     def _build_model(self):
         self.ent_embed = nn.Embedding(self.e_num, self.dim, max_norm=1.0).to(device)
@@ -54,16 +59,21 @@ class RKGCN(nn.Module):
             torch.nn.init.xavier_uniform(self.rule_embed.weight)
             # self.rule_embed = torch.Tensor(np.ones([1, self.rule_size]) / self.rule_size).to(device)
 
-        self.aggregate_layer = nn.Linear(self.dim, self.dim).to(device)
-        torch.nn.init.xavier_uniform(self.aggregate_layer.weight)
+        # self.aggregate_layer = nn.Linear(self.dim, self.dim).to(device)
+        self.concat_aggregate_layer = nn.Linear(self.dim * 2, self.dim).to(device)
+
+        # torch.nn.init.xavier_uniform(self.aggregate_layer.weight)
+        torch.nn.init.xavier_uniform(self.concat_aggregate_layer.weight)
 
     def save_model(self, model_file_path):
         self.logger.info("Save rkgcn model to {}.".format(model_file_path))
-        torch.save(self.state_dict(), self.rkgcn_model_file_path)
+
+        # torch.save(self.state_dict(), self.rkgcn_model_file_path)
+        torch.save(self.state_dict(), model_file_path)
 
     def load_model(self, model_file_path):
         self.logger.info("Load rkgcn model from {}.".format(model_file_path))
-        self.load_state_dict(torch.load(self.rkgcn_model_file_path))
+        self.load_state_dict(torch.load(model_file_path, map_location=device))
 
     def load_rule_weight(self, rule_weight_file_path):
         return np.load(rule_weight_file_path)
@@ -134,19 +144,47 @@ class RKGCN(nn.Module):
 
     # self_vectors, [batch_size,-1,dim]
     # neighbor_vectors, [batch_size,-1,neighbour_size,dim]
-    def sum_aggreator(self, self_vectors, neighbor_vectors, act):
+    # def sum_aggregator(self, self_vectors, neighbor_vectors, act):
+    #     # [batch_size, -1, dim]
+    #     neighbors_agg = self.mix_neighbour_vectors(neighbor_vectors)
+    #
+    #     # [-1, dim]
+    #     output = (self_vectors + neighbors_agg).view([-1, self.dim])
+    #     output = F.dropout(output, p=self.dropout)
+    #     output = self.aggregate_layer(output)
+    #
+    #     # [batch_size, -1, dim]
+    #     output = output.view([self.batch_size, -1, self.dim]).to(device)
+    #
+    #     return act(output)
+
+    def concat_aggreator(self, self_vectors, neighbor_vectors, act):
         # [batch_size, -1, dim]
         neighbors_agg = self.mix_neighbour_vectors(neighbor_vectors)
 
         # [-1, dim]
-        output = (self_vectors + neighbors_agg).view([-1, self.dim])
+        output = torch.cat((self_vectors, neighbors_agg), -1)
+        output = output.view([-1, self.dim * 2])
         output = F.dropout(output, p=self.dropout)
-        output = self.aggregate_layer(output)
+        output = self.concat_aggregate_layer(output)
 
         # [batch_size, -1, dim]
         output = output.view([self.batch_size, -1, self.dim]).to(device)
 
         return act(output)
+
+    # def neighbor_aggregator(self, self_vectors, neighbor_vectors, act):
+    #     # [batch_size, -1, dim]
+    #     neighbors_agg = self.mix_neighbour_vectors(neighbor_vectors)
+    #
+    #     output = neighbors_agg.view([-1, self.dim])
+    #     output = F.dropout(output, p=self.dropout)
+    #     output = self.aggregate_layer(output)
+    #
+    #     # [batch_size, -1, dim]
+    #     output = output.view([self.batch_size, -1, self.dim]).to(device)
+    #
+    #     return act(output)
 
     def aggregate(self, entities):
 
@@ -157,7 +195,7 @@ class RKGCN(nn.Module):
             entity_vectors_next_iter = []
             for hop in range(self.max_step - i):
                 shape = [self.batch_size, -1, self.neighbour_size, self.dim]
-                vector = self.sum_aggreator(
+                vector = getattr(self, self.aggregate_name)(
                     self_vectors=entity_vectors[hop].view([self.batch_size, -1, self.dim]),
                     neighbor_vectors=entity_vectors[hop + 1].view(shape), act=act)
                 entity_vectors_next_iter.append(vector)
@@ -180,3 +218,40 @@ class RKGCN(nn.Module):
         recall = recall_score(y_true=label_array, y_pred=scores)
         f1 = f1_score(y_true=label_array, y_pred=scores)
         return auc, f1, precision, recall, scores
+
+    def cal_ndcg(self, prediction_item, target_item):
+        for idx, item in enumerate(prediction_item):
+            if item == target_item:
+                return math.log(2) / math.log(idx + 2)
+
+        return 0
+
+    def hits_K_eval(self, user_list, item_list, rule_list):
+        output = self.user_rep(user_list, rule_list)
+        output = output.view((len(user_list), 1, -1))
+
+        item_embed = self.ent_embed(torch.LongTensor(item_list).to(device))
+        item_embed_transposed = torch.transpose(item_embed, 2, 1)
+        scores = torch.bmm(output, item_embed_transposed).view(len(user_list), -1).cpu().detach().numpy()
+
+        ordered_scores = np.argsort(scores, axis=-1)
+        ordered_scores = ordered_scores.transpose()[::-1].transpose()
+
+        hitsK_dict = {}
+        for i in range(15):
+            hitsK_dict[i + 1] = 0
+
+        ndcgK_dict = {}
+        for i in range(15):
+            ndcgK_dict[i + 1] = 0
+
+        for idx, user_id in enumerate(user_list):
+
+            for i in range(15):
+                hits_k = i + 1
+                if 100 in list(ordered_scores[idx][:hits_k]):
+                    hitsK_dict[hits_k] += 1
+
+                ndcgK_dict[hits_k] += self.cal_ndcg(ordered_scores[idx][:hits_k], 100)
+
+        return hitsK_dict, ndcgK_dict

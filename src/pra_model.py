@@ -5,9 +5,10 @@ import os
 
 from sklearn.metrics import f1_score, roc_auc_score, precision_score, recall_score, roc_curve
 
-from src.ALogger import ALogger
-from src.Args import args
-from src.Graph import Graph
+from ALogger import ALogger
+from Args import args
+from Graph import Graph
+from Sundries import get_x_percent_of_ndarray
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -25,12 +26,15 @@ class PRA(nn.Module):
     def _build_model(self):
         self.layer1 = nn.Linear(self.feature_size, 1)
 
+    # @torchsnooper.snoop()
     def forward(self, input_x):
         return self.layer1(torch.Tensor(input_x).to(device))
 
+    # @torchsnooper.snoop()
     def update(self, train_x, train_y):
         output = self.forward(train_x)
         output = torch.sigmoid(output)
+        output = output.view(-1)
 
         criterion = nn.BCELoss().to(device)
         loss = criterion(output, torch.Tensor(train_y).to(device))
@@ -47,10 +51,11 @@ class PRA(nn.Module):
         self.load_state_dict(torch.load(file_path))
 
     def save_rule_weight(self, rule_weight_path):
-        layer_weight = self.layer1.weight.data.numpy()
+        layer_weight = self.layer1.weight.data.cpu().numpy()
         np.save(rule_weight_path, layer_weight)
 
 
+# @torchsnooper.snoop()
 def train_pra_model(pra_args, pra_model, train_data, eval_data, test_data):
     lr = pra_args.pra_lr
     l2_weight = pra_args.pra_l2_weight
@@ -61,6 +66,8 @@ def train_pra_model(pra_args, pra_model, train_data, eval_data, test_data):
 
     eval_auc_list = []
     eval_f_list = []
+
+    train_cnt = 0
 
     for epoch_i in range(n_epochs):
         start = 0
@@ -92,6 +99,7 @@ def train_pra_model(pra_args, pra_model, train_data, eval_data, test_data):
         eval_f_list.append(eval_f)
 
         if len(eval_auc_list) == 1 or eval_auc_list[-1] > eval_auc_list[-2]:
+            train_cnt = 0
             pra_model.save_model(args.pra_model_file_path)
 
         print('epoch %d    train auc: %.4f  f1: %.4f prec: %.4f reca: %.4f  '
@@ -102,7 +110,9 @@ def train_pra_model(pra_args, pra_model, train_data, eval_data, test_data):
                  test_auc, test_f, test_prec, test_reca))
 
         if len(eval_auc_list) > 1 and eval_auc_list[-1] <= eval_auc_list[-2]:
-            break
+            train_cnt += 1
+            if train_cnt >= 3:
+                break
 
 
 def eval_prec_reca_f(pra_model, data):
@@ -136,7 +146,7 @@ def generate_path_feature(rule_id_list, g, data_x_y, feature_data_path):
 
 if __name__ == "__main__":
 
-    train_model = False
+    train_model = True
 
     g = Graph(args)
     g.load_e_r_mapping()
@@ -151,12 +161,23 @@ if __name__ == "__main__":
     eval_data = np.load(args.eval_file)
     test_data = np.load(args.test_file)
 
+    data_percent = 1
+    train_data = get_x_percent_of_ndarray(data_percent, train_data)
+    print("Train data num: {}".format(len(train_data)))
+
+    eval_data = get_x_percent_of_ndarray(data_percent, eval_data)
+    print("Eval data num: {}".format(len(eval_data)))
+
+    test_data = get_x_percent_of_ndarray(data_percent, test_data)
+    print("Test data num: {}".format(len(test_data)))
+
     train_feature_data = generate_path_feature(rule_id_list, g, train_data, args.train_feature_file)
     eval_feature_data = generate_path_feature(rule_id_list, g, eval_data, args.eval_feature_file)
     test_feature_data = generate_path_feature(rule_id_list, g, test_data, args.test_feature_file)
 
     pra_model = PRA(train_feature_data[:, 0:-1].shape[1], args.pra_lr, args.pra_l2_weight)
 
+    pra_model.to(device)
     if train_model is True:
         train_pra_model(args, pra_model, train_feature_data, eval_feature_data, test_feature_data)
     else:

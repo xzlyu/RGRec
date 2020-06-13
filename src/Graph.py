@@ -5,7 +5,7 @@ import argparse
 import scipy
 from scipy.stats import chi2_contingency
 
-from src.Args import args
+from Args import args
 
 
 class Graph:
@@ -92,18 +92,28 @@ class Graph:
         self.chi_thresh = args.chi_thresh
 
     def load_e_r_mapping(self):
-
+        print("entity file: {}".format(self.entity_file))
         if len(self.e_id2name) == 0:
             print("load e  mapping")
             for line in open(self.entity_file, 'r', encoding="UTF-8").readlines()[1:]:
-                e_name, e_id = line.split()
+                line_array = line.split("\t")
+                if len(line_array) > 2:
+                    e_id = line_array[-1]
+                    e_name_list = []
+                    for one_name in line_array[:-1]:
+                        e_name_list.append(one_name)
+                    e_name = " ".join(e_name_list)
+                else:
+                    e_name, e_id = line.split("\t")
                 e_id = int(e_id)
                 self.e_name2id[e_name] = e_id
                 self.e_id2name[e_id] = e_name
+
             self.none_node_id = len(self.e_id2name)
             self.e_id2name[self.none_node_id] = self.none_node_name
             self.e_name2id[self.none_node_name] = self.none_node_id
 
+        print("relation file: {}".format(self.relation_file))
         if len(self.r_name2id) == 0:
             print("load r mapping")
             for line in open(self.relation_file, 'r', encoding="UTF-8").readlines()[1:]:
@@ -144,6 +154,7 @@ class Graph:
         self.load_e_r_mapping()
         self.construct_kg()
         e_num = len(self.e_id2name)
+        print("e num: {}".format(e_num))
 
         for r_id in self.r_id2name:
             self.adj_e_id_by_r_id[r_id] = np.zeros(shape=[e_num, self.neighbour_size], dtype=np.int32)
@@ -297,6 +308,7 @@ class Graph:
 
         print("Start Searching Path:\nR:{} Train Num:{}".format(self.r_id2name[r_id], len(train_data)))
 
+        # train_data = random.sample(train_data, 1000)
         for idx, ht in enumerate(train_data):
             h_id = ht[0]
             t_id = ht[1]
@@ -436,6 +448,13 @@ class Graph:
         right_path = self.r_id2ht_id[inv_r_id]
         right_step = 1
 
+        path_num_constrain = 100000
+        if len(left_path) > path_num_constrain:
+            left_path = random.sample(left_path, path_num_constrain)
+
+        if len(right_path) > path_num_constrain:
+            right_path = random.sample(right_path, path_num_constrain)
+
         while len(r_path) - (left_step + right_step) > 0:
             # print("Left Path length: {}.".format(len(left_path)))
             # print("Right Path length: {}.".format(len(right_path)))
@@ -530,6 +549,8 @@ class Graph:
             item_id_set.add(t_id)
             ground_truth_set.add("{};{}".format(h_id, t_id))
 
+        print("Get passed ht of {}".format(self.display_r_path(one_id_path)))
+
         passed_ht = self.get_passed_ht(one_id_path)
         passed_ht_token_final = set()
         for h_id, t_id in passed_ht:
@@ -564,6 +585,8 @@ class Graph:
 
     def get_rules(self, r_id):
 
+        print("Generate rules for : {}".format(r_id))
+
         rules_final = []
         if os.path.exists(self.rule_file):
             for line in open(self.rule_file, 'r', encoding="UTF-8").readlines():
@@ -575,15 +598,25 @@ class Graph:
         train_data = np.load(self.train_file)
         train_data = list(train_data[np.where(train_data[:, 2] == 1)])
 
+        print("train data num : {}".format(len(train_data)))
+        num_for_extract_rules = 10000
+        if len(train_data) > num_for_extract_rules:
+            train_data = np.array(train_data)
+            train_data_idxes = np.random.choice(list(range(len(train_data))), num_for_extract_rules, False)
+            train_data = train_data[np.array(train_data_idxes)]
+
         self.load_e_r_mapping()
         self.construct_kg()
-        res_r_id_path_list, searched_e_r_path = g.search_path(r_id, self.max_step, train_data)
+
+        print("Max step: {}".format(self.max_step))
+        res_r_id_path_list, searched_e_r_path = self.search_path(r_id, self.max_step, train_data)
 
         cnt = 0
         for r_id_path in res_r_id_path_list:
-            p_value = g.chi_square(r_id, r_id_path)
+            # p_value = self.chi_square(r_id, r_id_path)
+            p_value = 0
             if p_value < self.chi_thresh:
-                rules_final.append([cnt, p_value, r_id_path, g.display_r_path(r_id_path)])
+                rules_final.append([cnt, p_value, r_id_path, self.display_r_path(r_id_path)])
                 cnt += 1
 
         with open(self.rule_file, 'w', encoding="UTF-8") as f:
@@ -672,6 +705,11 @@ class Graph:
                 feature.append(int(self.is_passed(ht, rule)))
             train_x.append(feature)
         return train_x
+
+    def r_id_by_name(self, r_name):
+        if r_name in self.r_name2id:
+            return self.r_name2id[r_name]
+        return None
 
 
 if __name__ == "__main__":
