@@ -1,1 +1,1 @@
-# RuleKGCN
+# RGRec
